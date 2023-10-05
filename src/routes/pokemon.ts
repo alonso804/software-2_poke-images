@@ -1,9 +1,9 @@
 import { Router } from 'express';
 
-import PokemonController from '../controllers/pokemon';
+import PokeImagesController from '../controllers/poke-images';
 
 const router = Router();
 
-router.get('/images/:id', PokemonController.getImageById);
+router.get('/images/:id', PokeImagesController.get);
 
 export default router;
