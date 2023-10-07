@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { Request, Response } from 'express';
+import { performance } from 'perf_hooks';
 import { REDIS_STORE_TIME } from 'src/helpers/constants';
 import { logger } from 'src/logger';
 import { client } from 'src/redis';
@@ -12,6 +12,8 @@ const getSchema = z.object({
 
 class PokeImagesController {
   static async get(req: Request, res: Response): Promise<void> {
+    const start = performance.now();
+
     const data = getSchema.safeParse(req.params);
 
     if (!data.success) {
@@ -24,7 +26,8 @@ class PokeImagesController {
     const redisRes = await client.get(`poke-images:${id}`);
 
     if (redisRes) {
-      logger.info({ microservice: 'poke-images', message: 'Read from redis' });
+      const end = performance.now();
+      logger.info({ microservice: 'poke-images', message: 'Read from redis', time: end - start });
 
       res.status(200).send(JSON.parse(redisRes));
       return;
@@ -32,17 +35,41 @@ class PokeImagesController {
 
     const uri = `${process.env.POKE_API_URI}/pokemon/${id}`;
 
-    const {
-      data: { sprites: url },
-    } = await axios.get(uri);
+    let images: unknown[];
 
-    client.set(`poke-images:${id}`, JSON.stringify({ url }), {
+    try {
+      const response = await axios.get(uri);
+
+      const data = response.data as { sprites: unknown[] };
+
+      images = data.sprites;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        if (error.response?.status === 404) {
+          const end = performance.now();
+
+          logger.warn({
+            microservice: 'poke-images',
+            message: 'Pokemon not found',
+            time: end - start,
+          });
+
+          res.status(404).send({ message: 'Pokemon not found' });
+          return;
+        }
+      }
+
+      throw error;
+    }
+
+    client.set(`poke-images:${id}`, JSON.stringify({ url: images }), {
       EX: REDIS_STORE_TIME,
     });
 
-    logger.info({ microservice: 'poke-images', message: 'Read from api' });
+    const end = performance.now();
+    logger.info({ microservice: 'poke-images', message: 'Read from api', time: end - start });
 
-    res.status(200).send({ url });
+    res.status(200).send({ images });
   }
 }
 
