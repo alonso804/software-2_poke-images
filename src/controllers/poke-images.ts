@@ -14,6 +14,8 @@ class PokeImagesController {
   static async get(req: Request, res: Response): Promise<void> {
     const start = performance.now();
 
+    let status = 200;
+
     const data = getSchema.safeParse(req.params);
 
     if (!data.success) {
@@ -27,9 +29,14 @@ class PokeImagesController {
 
     if (redisRes) {
       const end = performance.now();
-      logger.info({ microservice: 'poke-images', message: 'Read from redis', time: end - start });
+      logger.info({
+        microservice: 'poke-images',
+        message: 'Read from redis',
+        time: end - start,
+        status,
+      });
 
-      res.status(200).send(JSON.parse(redisRes));
+      res.status(status).send(JSON.parse(redisRes));
       return;
     }
 
@@ -48,13 +55,16 @@ class PokeImagesController {
         if (error.response?.status === 404) {
           const end = performance.now();
 
+          status = 404;
+
           logger.warn({
             microservice: 'poke-images',
             message: 'Pokemon not found',
             time: end - start,
+            status,
           });
 
-          res.status(404).send({ message: 'Pokemon not found' });
+          res.status(status).send({ message: 'Pokemon not found' });
           return;
         }
       }
@@ -67,9 +77,14 @@ class PokeImagesController {
     });
 
     const end = performance.now();
-    logger.info({ microservice: 'poke-images', message: 'Read from api', time: end - start });
+    logger.info({
+      microservice: 'poke-images',
+      message: 'Read from api',
+      time: end - start,
+      status,
+    });
 
-    res.status(200).send({ images });
+    res.status(status).send({ images });
   }
 }
 
